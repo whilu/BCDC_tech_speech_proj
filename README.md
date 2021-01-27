@@ -42,6 +42,20 @@ IoC 是一种设计原则，帮助我们降低代码之间的耦合度。刚刚�
 
 ### Beat Blade 项目中实现依赖注入(DI)的几种方式
 
+#### C# 特性(Attribute)
+
+在讲 C# 中的依赖注入实现方式之前，必须要提及的是「特性」。一个特性的定义如下:
+
+```c#
+[AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+public class Inject: Attribute
+{
+	public Inject() { }
+}
+```
+
+使用特性，可以有效地将元数据或声明性信息与代码（程序集、类型、方法、属性等）相关联。将特性与程序实体相关联后，可以在运行时使用反射这项技术查询特性。在依赖注入中，通常会使用自定义特性标记需要注入的属性或成员变量等，以此告知 IoC 容器这里需要提供依赖对象。
+
 #### 运行时反射实现依赖注入
 
 C# 中的反射
