@@ -133,7 +133,9 @@ public class Injector
 
 在说 CIL 代码编织前先来看看 IL2CPP 构建流，如图:
 
-TODO [图片]()
+<center>
+<img src="https://raw.githubusercontent.com/whilu/lujun.co-storge/master/image/il2cpp-toolchain-smaller.png" width="60%" height="60%" />
+</center>
 
 在 Unity IL2CPP 构建流中，C# 代码首先被编译为 CIL code，随后 CIL code 经由 IL2CPP 被转换成 CPP，最终再经由目标平台的 C++ 编译器将 CPP 代码编译成目标机器码以执行。
 
