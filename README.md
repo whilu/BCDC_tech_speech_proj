@@ -4,7 +4,7 @@
 
 ### 什么是 IoC
 
-控制反转（Inversion of Control，缩写为 IoC），是面向对象编程中的一种设计原则，用来减低代码之间的耦合度。 - 维基百科
+> 控制反转（Inversion of Control，缩写为 IoC），是面向对象编程中的一种设计原则，用来减低代码之间的耦合度。 - 维基百科
 
 控制反转到底是什么被反转了？这里指的是依赖对象的获取。在传统面向对象编程中，依赖对象往往是主动 new 出来；但是在 IoC 中，依赖对象转变为由 IoC 容器提供。
 
@@ -48,23 +48,82 @@ IoC 是一种设计原则，帮助我们降低代码之间的耦合度。刚刚�
 
 ```c#
 [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
-public class Inject: Attribute
+public class InjectAttribute : Attribute
 {
-	public Inject() { }
+    public InjectAttribute() { }
 }
 ```
 
 使用特性，可以有效地将元数据或声明性信息与代码（程序集、类型、方法、属性等）相关联。将特性与程序实体相关联后，可以在运行时使用反射这项技术查询特性。在依赖注入中，通常会使用自定义特性标记需要注入的属性或成员变量等，以此告知 IoC 容器这里需要提供依赖对象。
 
+下面，我们就借由特性来看看几种依赖注入。
+
 #### 运行时反射实现依赖注入
 
-C# 中的反射
+假设现在有一个 `Cat` 类，在我们的 `MonoBehaviour` 中依赖使用这个类，下面就使用反射和特性实现简单的依赖注入。
 
-##### 具体实现
+```c#
+public class IoCMonoBehaviour : MonoBehaviour
+{
+    [InjectAttribute]
+    public Cat Cat { get; set; }
+    
+    private void Awake()
+    {
+        // Do inject
+        Injector.Inject(this);
+    }
+
+    private void Start()
+    {
+        // Print cat's name
+        Debug.Log(Cat.name);
+    }
+}
+```
+
+核心注入方法:
+
+```c#
+public class Injector
+{
+    public static void Inject(object target)
+    {
+        Type type = target.GetType();
+        
+        MemberInfo[] members = type.FindMembers(
+            MemberTypes.Property, 
+            BindingFlags.SetProperty | BindingFlags.Public | BindingFlags.Instance, 
+            null, null);
+        
+        foreach (MemberInfo member in members)
+        {
+            object[] injections = member.GetCustomAttributes(typeof(InjectAttribute), true);
+            if (injections.Length > 0 && member is PropertyInfo)
+            {
+                PropertyInfo propertyInfo = member as PropertyInfo;
+                propertyInfo.SetValue(target, Activator.CreateInstance(propertyInfo.PropertyType));
+            }
+        }
+    }
+}
+```
+
+可以看出，上面的代码中我们并没有使用 `new` 关键字就能够使用 `Cat` 对象。所以通过「反射 + 特性」实现运行时依赖注入并不难，但是当一个类存在大量依赖需要注入时，反射查找以及动态创建对象带来的对性损耗就成了一个值得很关注的问题，特别是在性能感知及其敏感移动设备上。
+
+##### 解决反射产生的性能问题
+
+反射必定会产生性能开销，那么如何尽可能减小了，在 Beat Blade 项目中做了如下几点优化:
+
+1. 依赖注入均摊到场景加载的 Loading 中；
+
+2. 缓存可缓存的依赖对象；
+
+3. 单例的使用。
 
 ##### iOS 的 Full AOT 以及现使用的 IL2CPP 模式反射注入依赖会存在问题吗？
 
-##### 运行时通过反射动态生成依赖带来的性能问题
+在 iOS 系统的严苛要求下，所有代码必须全部提前编译以实现 Full AOT。那么上面的反射实现的依赖注入会有问题吗？答案是只要不使用 `System.Reflection.Emit` 下的 API，Full AOT 都不会有任何问题。
 
 #### IL 编织
 
