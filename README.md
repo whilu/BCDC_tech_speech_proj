@@ -109,7 +109,7 @@ public class Injector
 }
 ```
 
-可以看出，上面的代码中我们没有使用 `new` 关键字就能够使用 `Cat` 对象。所以通过「反射 + 特性」实现运行时依赖注入并不难，但是当一个类存在大量依赖需要注入时，反射查找以及动态创建对象带来的性能损耗就成了一个值得很关注的问题，特别是在性能感知极其敏感移动设备上。
+可以看出，上面的代码中我们没有使用 `new` 关键字就能够使用 `Cat` 对象。所以通过「反射 + 特性」实现运行时依赖注入并不难，但是当一个类存在大量依赖需要注入时，反射查找以及动态创建对象带来的性能损耗就成了一个值得很关注的问题，特别是在对性能极其敏感移动设备上。
 
 反射必定会产生性能开销，那么如何尽可能减小了，在 Beat Blade 项目中做了如下几点优化:
 
@@ -134,7 +134,7 @@ public class Injector
 在说 CIL 代码编织前先来看看 IL2CPP 构建流，如图:
 
 <center>
-<img src="https://raw.githubusercontent.com/whilu/lujun.co-storge/master/image/il2cpp-toolchain-smaller.png" width="60%" height="60%" />
+<img src="https://raw.githubusercontent.com/whilu/lujun.co-storge/master/image/il2cpp-toolchain-smaller.png" width="70%" height="70%" />
 </center>
 
 在 Unity IL2CPP 构建流中，C# 代码首先被编译为 CIL code，随后 CIL code 经由 IL2CPP 被转换成 CPP，最终再经由目标平台的 C++ 编译器将 CPP 代码编译成目标机器码以执行。
@@ -143,17 +143,55 @@ public class Injector
 
 ##### 使用一些工具编写 CIL 代码
 
-1. 使用 `System.Reflection.Emit` 命名空间下的相关 API 实现 IL 指令。虽然 Full AOT 下不被允许使用，但是在 AOT 之前借助 Emit 生成 IL 代码是没问题的；
+1. 使用 `System.Reflection.Emit` 命名空间下的相关 API 实现 CIL 指令编写。虽然在 Full AOT 模式下不被允许使用，但是在 Full AOT 之前借助 Emit 生成 CIL 代码是没问题的；
 
 2. 使用开源项目 Mono.Cecil 编写 CIL 代码。
 
-下面就以 Mono.Cecil 为例，说说使用 CIL 编织技术实现依赖注入的方案。
+下面就以 Mono.Cecil 使用为例，说说使用 CIL 编织技术实现依赖注入的方案。
 
 ##### CIL 实现依赖注入
 
-TODO 展示编织前后的 CIL
+还是以前面的 `Cat` 注入为例，首先看看未注入之前我们的 `IoCMonoBehaviour` 类中 `Awake` 方法的 CIL 代码:
 
-TODO Mono.Cecil 编织代码
+```cpp
+.method private hidebysig 
+	instance void Awake () cil managed 
+{
+	// Method begins at RVA 0x2d76
+	// Code size 2 (0x2)
+	.maxstack 8
+
+	IL_0000: nop
+	IL_0001: ret
+} // end of method IoCMonoBehaviour::Awake
+```
+
+然后我们使用 Mono.Cecil 编织 CIL 代码，以辅助注入 `Cat` 对象，代码如下:
+
+```c#
+
+```
+
+上面的编织过程，主要进行了对 `IoCMonoBehaviour` 类中 `Cat` 属性的赋值操作。
+
+再看看注入之后的 `Awake` 方法的 CIL 代码:
+
+```cpp
+.method private hidebysig 
+    instance void Awake () cil managed 
+{
+    // Method begins at RVA 0x4bf1a
+    // Code size 14 (0xe)
+    .maxstack 8
+
+    IL_0000: nop
+    IL_0001: ldarg.0
+    IL_0002: newobj instance void com.battlecryhq.beatrunner.Cat::.ctor()
+    IL_0007: call instance void com.battlecryhq.beatrunner.IoCMonoBehaviour::set_Cat(class com.battlecryhq.beatrunner.Cat)
+    IL_000c: nop
+    IL_000d: ret
+} // end of method IoCMonoBehaviour::Awake
+```
 
 ##### CIL 编织后的 DLL 在 IL2CPP 构建流中还兼容吗？
 
@@ -199,7 +237,7 @@ TODO 再次总结这种方式（画图）
 
 - 首先，对于使用者需要适应一下这种模式，由于不再是只有一个「特性」标记，所以需要时刻清楚依赖与被依赖的关系；
 
-- 需要定义多几个接口（类）来确定依赖与被依赖的关系网；
+- 需要定义多几个接口（类）来确定依赖与被依赖的关系；
 
 上面的问题都是值得靠开发者解决的，这样可以让代码更加灵活可扩展。
 
