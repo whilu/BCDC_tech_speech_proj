@@ -169,12 +169,43 @@ public class Injector
 然后我们使用 Mono.Cecil 编织 CIL 代码，以辅助注入 `Cat` 对象，代码如下:
 
 ```c#
-
+private void ILInject()
+{
+    // 获取相应的 definition
+    AssemblyDefinition assemblyDefinition = AssemblyDefinition.ReadAssembly("assemblyPath", null);
+    ModuleDefinition moduleDefinition = assemblyDefinition.MainModule;
+    MethodDefinition methodDefinition = moduleDefinition.Types[0].Methods[0];
+    ILProcessor ilProcessor = methodDefinition.Body.GetILProcessor();
+        
+    // 生成 CIL 指令语句
+    Instruction i1 = ilProcessor.Create(OpCodes.Ldarg, 0);
+    Instruction i2 = ilProcessor.Create(OpCodes.Newobj,
+        moduleDefinition.ImportReference(typeof(Cat).GetConstructor(new Type[] { })));
+    Instruction i3 = ilProcessor.Create(OpCodes.Call,
+        moduleDefinition.ImportReference(typeof(IoCMonoBehaviour).GetMethod("set_Cat", new Type[0])));
+    
+    // 插入生成的 CIL 指令
+    ilProcessor.Append(i1);
+    ilProcessor.Append(i2);
+    ilProcessor.Append(i3);
+}
 ```
 
-上面的编织过程，主要进行了对 `IoCMonoBehaviour` 类中 `Cat` 属性的赋值操作。
+上面的编织过程，主要进行了对 `IoCMonoBehaviour` 类中 `Cat` 属性的赋值操作。具体如下:
 
-再看看注入之后的 `Awake` 方法的 CIL 代码:
+- 首先根据 DLL 路径加载 `AssemblyDefinition`；
+
+- 然后根据 `AssemblyDefinition` 依次获取到 `ModuleDefinition`（这里指命名空间 `com.battlecryhq.beatrunner`）、`TypeDefinition`（具体的 `IoCMonoBehaviour` 类）以及 `MethodDefinition`（类 `IoCMonoBehaviour` 中的 `Awake` 方法）；
+
+- 获取到 `Awake` 方法的 ILProcessor 之后，就能够对该方法中的 CIL 代码进行操作；
+
+- `ilProcessor.Create(OpCodes.Ldarg, 0)` 会生成 `ldarg.0` 这条语句，表示取当前方法的第一个参数（即当前类的引用 this）；当 CLR 指令执行到此处时会将 `this` 压入方法数据栈;
+
+- `ilProcessor.Create(OpCodes.Newobj...` 这行代码会产生 `newobj instance void com.battlecryhq.beatrunner.Cat::.ctor()` 语句；当 CLR 执行这条指令后会创建一个新的 `Cat` 对象到堆中，并将其引用压进方法的数据栈；
+
+- `ilProcessor.Create(OpCodes.Call...` 这行代码会产生 `call instance void com.battlecryhq.beatrunner.IoCMonoBehaviour::set_Cat(class com.battlecryhq.beatrunner.Cat)` 这条语句；CLR 执行这条指令会先从方法的数据栈中取出前面压入的两个数据 `this` 和 `Cat` 对象的引用，用于 `set_Cat` 方法的 invoke。
+
+至此，`Cat` 属性就被成功的设置了相应的对象实例。再看看注入之后的 `Awake` 方法完整的 CIL 代码:
 
 ```cpp
 .method private hidebysig 
@@ -193,9 +224,7 @@ public class Injector
 } // end of method IoCMonoBehaviour::Awake
 ```
 
-##### CIL 编织后的 DLL 在 IL2CPP 构建流中还兼容吗？
-
-CIL 编译后期 IL2CPP 前期生成代码，性能比反射好。那么会存在什么问题吗？
+CIL 编织既能做到非侵入式的依赖注入，也能解决反射依赖注入带来的性能问题。由于在 IL2CPP 转换之前进行拦截，所以与 IL2CPP 构建相兼容。那么这种方式会存在什么问题吗？
 
 ##### CIL 编织存在的问题
 
