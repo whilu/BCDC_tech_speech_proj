@@ -234,7 +234,7 @@ CIL 编织既能做到非侵入式的依赖注入，也能解决反射依赖注�
 
 - C# 中最常使用的泛型，在 CIL 编织过程中变得较为复杂（在 CIL 编织阶段要确定所有泛型的具体类型，这一块的处理需要特别谨慎）；
 
-- 因为操作的是 CIL 代码而不是源 C# 代码，所以调试比较困难；
+- 仅仅生成了 CIL 代码而没有源 C# 代码与之对应，所以调试比较困难；
 
 - 基于 Unity 构建并上传至 Unity 崩溃分析服务的符号表部分可能无法匹配，若这部分代码出现异常可能会在后台看不到相应的出错堆栈信息。
 
@@ -248,15 +248,113 @@ CIL 编织既能做到非侵入式的依赖注入，也能解决反射依赖注�
 
 这种方式拦截 Unity 构建流中 CIL 编译这一步。在 C# 代码被编译成 CIL 之前，通过寻找被一组预定「特性」标记的属性以及相关类(接口)，由「特性」携带的参数得到依赖类与被依赖类之间的关系，从而生成相关辅助类，再由辅助（容器）类提供依赖并实现注入。
 
-#### 实现
+### 自动生成辅助（容器）类实现
 
-说起来很绕，还是来看看简单的实现方案。
+说起来很绕，还是来看看大致的实现方案。
 
-TODO CodeDOM
+#### 自定义「特性」
 
-TODO 实现
+- `InjectAttribute` 用来描述需要被注入的域；
 
-TODO 再次总结这种方式（画图）
+```c#
+[AttributeUsage(AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+public class InjectAttribute : Attribute { }
+```
+
+- `ProvidesAttribute`，这个特性用来描述产生依赖对象的方法；
+
+```c#
+[AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
+public class ProvidesAttribute : Attribute { }
+```
+
+- `ModuleAttribute` 用来描述拥有产生一个或多个依赖对象方法的类；
+
+```c#
+[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
+public class ModuleAttribute : Attribute { }
+```
+
+- `ComponentAttribute` 用来关联依赖产生方与依赖注入组件需求方（定义依赖于被依赖方的关系），从而依赖注入组件知道从何处获得依赖对象。
+
+```c#
+[AttributeUsage(AttributeTargets.Interface, AllowMultiple = false, Inherited = false)]
+public class ComponentAttribute : Attribute
+{
+    public Type Type { get; set; }
+
+    public ComponentAttribute(Type type)
+    {
+        Type = type;
+    }
+}
+```
+
+#### Module 以及 Component
+
+- Module 类定义拥有产生一个或多个依赖对象的方法的类；
+
+```c#
+[Module]
+public class GameMonoBehaviourModule
+{
+    [Provides]
+    public Cow ProvideCow()
+    {
+        return new Cow("Cow");
+    }
+}
+```
+
+- Component 接口连接依赖产生方与依赖注入组件需求方。
+
+```c#
+[Component(typeof(GameMonoBehaviourModule))]
+public interface IGameMonoBehaviourComponent
+{
+    void Inject(GameMonoBehaviour gameMonoBehaviour);
+}
+```
+
+#### 使用 CodeDOM 生成源代码
+
+CodeDOM 是什么？它提供表示多种常见源代码元素的类型。可以设计一个程序，它使用 CodeDOM 元素生成源代码模型来组合对象图。简单来说，使用 CodeDOM 提供的 API 在编译前期生成我们的辅助依赖注入的代码。
+
+对于 CodeDOM 编织 C# 代码不做过多介绍，在这里主要理解使用这种技术的原理。下面看看使用 CodeDOM 后生成的依赖注入辅助类:
+
+[图片]()
+
+- `GameMonoBehaviourModule_ProvideFactory` 类主要负责连接依赖提供的 Module 类用于产生依赖对象；
+
+- `GameMonoBehaviour_MemberInjector` 类主要用来对依赖需求方实现依赖注入；
+
+- `GameMonoBehaviourIGameMonoBehaviourComponent` 主要用来连接上述两个类以及为开发者提供注入初始化代码入口。
+
+最后在我们的依赖需求使用类中，使用生成的 `GameMonoBehaviourIGameMonoBehaviourComponent` 类实现依赖注入:
+
+```c#
+public class GameMonoBehaviour : MonoBehaviour
+{
+    [InjectAttribute] 
+    public Cow _cow;
+    
+    [InjectAttribute] 
+    public Duck _duck;
+    
+    private void Awake()
+    {
+        GameMonoBehaviourIGameMonoBehaviourComponent.Builder().Build().Inject(this);
+        
+        _cow.Speak();
+        _duck.Speak();
+    }
+}
+```
+
+再总结一下这种方式
+
+
+
 
 #### 总结一下辅助（容器）类实现依赖注入
 
