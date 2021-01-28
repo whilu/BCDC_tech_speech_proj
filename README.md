@@ -201,9 +201,9 @@ private void ILInject()
 
 - `ilProcessor.Create(OpCodes.Ldarg, 0)` 会生成 `ldarg.0` 这条语句，表示取当前方法的第一个参数（即当前类的引用 this）；当 CLR 指令执行到此处时会将 `this` 压入方法数据栈;
 
-- `ilProcessor.Create(OpCodes.Newobj...` 这行代码会产生 `newobj instance void com.battlecryhq.beatrunner.Cat::.ctor()` 语句；当 CLR 执行这条指令后会创建一个新的 `Cat` 对象到堆中，并将其引用压进方法的数据栈；
+- `ilProcessor.Create(OpCodes.Newobj, moduleDefinition.ImportReference(typeof(Cat).GetConstructor(new Type[] { })))` 这行代码会产生 `newobj instance void com.battlecryhq.beatrunner.Cat::.ctor()` 语句；当 CLR 执行这条指令后会创建一个新的 `Cat` 对象到堆中，并将其引用压进方法的数据栈；
 
-- `ilProcessor.Create(OpCodes.Call...` 这行代码会产生 `call instance void com.battlecryhq.beatrunner.IoCMonoBehaviour::set_Cat(class com.battlecryhq.beatrunner.Cat)` 这条语句；CLR 执行这条指令会先从方法的数据栈中取出前面压入的两个数据 `this` 和 `Cat` 对象的引用，用于 `set_Cat` 方法的 invoke。
+- `ilProcessor.Create(OpCodes.Call, moduleDefinition.ImportReference(typeof(IoCMonoBehaviour).GetMethod("set_Cat", new Type[0])))` 这行代码会产生 `call instance void com.battlecryhq.beatrunner.IoCMonoBehaviour::set_Cat(class com.battlecryhq.beatrunner.Cat)` 这条语句；CLR 执行这条指令会先从方法的数据栈中取出前面压入的两个数据 `this` 和 `Cat` 对象的引用，用于 `set_Cat` 方法的 invoke。
 
 至此，`Cat` 属性就被成功的设置了相应的对象实例。再看看注入之后的 `Awake` 方法完整的 CIL 代码:
 
@@ -303,6 +303,12 @@ public class GameMonoBehaviourModule
     {
         return new Cow("Cow");
     }
+    
+    [Provides]
+    public Duck ProvideDuck()
+    {
+        return new Duck("Duck");
+    }
 }
 ```
 
@@ -322,7 +328,9 @@ CodeDOM 是什么？它提供表示多种常见源代码元素的类型。可以
 
 对于 CodeDOM 编织 C# 代码不做过多介绍，在这里主要理解使用这种技术的原理。下面看看使用 CodeDOM 后生成的依赖注入辅助类:
 
-[图片]()
+<center>
+<img src="https://raw.githubusercontent.com/whilu/lujun.co-storge/master/image/bcdc_tech_speech_code_generate_flow.png" width="70%" height="70%" />
+</center>
 
 - `GameMonoBehaviourModule_ProvideFactory` 类主要负责连接依赖提供的 Module 类用于产生依赖对象；
 
@@ -351,11 +359,6 @@ public class GameMonoBehaviour : MonoBehaviour
 }
 ```
 
-再总结一下这种方式
-
-
-
-
 #### 总结一下辅助（容器）类实现依赖注入
 
 由于操作的是 C# 源码，所以前面提到的 CIL 会产生的问题都得到了解决；同样编译期就确定了依赖注入如何提供，不需要运行时动态查找和生成，可解决反射注入带来的性能问题。
@@ -368,17 +371,13 @@ public class GameMonoBehaviour : MonoBehaviour
 
 上面的问题都是值得靠开发者解决的，这样可以让代码更加灵活可扩展。
 
-目前这种依赖注入方式在 Beat Blade 项目中小范围使用中，成熟之后会慢慢替换存在的可能产生问题的注入方式。
-
-## Ioc 与依赖注入(DI)总结
-
-TODO
+目前这种依赖注入方式在 Beat Blade 项目中小范围使用中，未来会进一步完善这一框架（例如单例注入、Lazy injections、Provider injections 等），然后慢慢替换现在项目中存在的可能产生问题的注入。
 
 ## 总结
 
-TODO
+在软件开发过程中，各种设计模式起着不可或缺的作用。作为一种设计原则，控制反转（IoC）为我们提供了一种良好的代码松散耦合的规范；项目代码结构更加清晰且便于扩展，能够更加充分保证了代码质量。
 
-
+Beat Blade 项目从 IoC 最初由反射实现，演进为编译前（中）期 CIL 自动编织 + 辅助类自动生成 + 反射三种技术实现 IoC，既享受了 IoC 带来的便利性，也保证了程序上的稳定性。
 
 
 
