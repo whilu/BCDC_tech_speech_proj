@@ -157,12 +157,12 @@ public class Injector
 .method private hidebysig 
 	instance void Awake () cil managed 
 {
-	// Method begins at RVA 0x2d76
-	// Code size 2 (0x2)
-	.maxstack 8
+    // Method begins at RVA 0x2d76
+    // Code size 2 (0x2)
+    .maxstack 8
 
-	IL_0000: nop
-	IL_0001: ret
+    IL_0000: nop
+    IL_0001: ret
 } // end of method IoCMonoBehaviour::Awake
 ```
 
